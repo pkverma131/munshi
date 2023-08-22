@@ -29,14 +29,15 @@ class _MunshiAppHomeState extends State<MunshiAppHome> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   UserTransaction? _editingTransaction;
-  List<UserTransaction> _transactions = []; // Declare _transactions list
-  int _editingTransactionIndex = -1; // Declare _editingTransactionIndex and initialize it with -1
+  List<UserTransaction> _transactions = [];
+  int _editingTransactionIndex = -1;
 
   @override
   void initState() {
     super.initState();
     _fetchTransactions();
   }
+
   void _addTransaction() async {
     final String title = _titleController.text;
     final double amount = double.tryParse(_amountController.text) ?? 0;
@@ -45,10 +46,8 @@ class _MunshiAppHomeState extends State<MunshiAppHome> {
       return;
     }
 
-    // Check if an existing transaction is being edited
     if (_editingTransaction != null) {
       _editingTransaction!.updateTransaction(newTitle: title, newAmount: amount);
-
       await DatabaseHelper().updateTransaction(_editingTransaction!);
 
       setState(() {
@@ -57,7 +56,6 @@ class _MunshiAppHomeState extends State<MunshiAppHome> {
         _amountController.clear();
       });
     } else {
-      // If not editing, insert a new transaction
       final newTransaction = UserTransaction(
         id: DateTime.now().toString(),
         title: title,
@@ -85,19 +83,17 @@ class _MunshiAppHomeState extends State<MunshiAppHome> {
         builder: (context) => EditTransactionScreen(transaction: transaction),
       ),
     ).then((_) {
-      // When returning from EditTransactionScreen, reset the editing index
       setState(() {
         _editingTransactionIndex = -1;
       });
 
-      // Refresh the transactions
       _fetchTransactions();
     });
   }
+
   void _deleteTransaction(UserTransaction transaction) async {
     await DatabaseHelper().deleteTransaction(transaction.id);
 
-    // Remove the deleted transaction from the list
     setState(() {
       _transactions.remove(transaction);
     });
@@ -109,6 +105,7 @@ class _MunshiAppHomeState extends State<MunshiAppHome> {
       _transactions = transactions;
     });
   }
+
   void _saveEditedTransaction() async {
     if (_editingTransaction == null) {
       return;
@@ -133,118 +130,82 @@ class _MunshiAppHomeState extends State<MunshiAppHome> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2, // Number of tabs
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Expense Manager'),
-          bottom: TabBar(
-            tabs: [
-              Tab(text: 'Home'),
-              Tab(text: 'Transactions'),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Expense Manager'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _titleController,
+                keyboardType: TextInputType.text,
+                decoration: InputDecoration(labelText: 'Title'),
+              ),
+              TextFormField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: 'Amount'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (_editingTransaction != null) {
+                    _saveEditedTransaction();
+                  } else {
+                    _addTransaction();
+                  }
+                },
+                child: Text(_editingTransaction != null ? 'Save Transaction' : 'Add Transaction'),
+              ),
+              SizedBox(height: 16),
+              FutureBuilder<double>(
+                future: DatabaseHelper().calculateTotalAmount(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return CircularProgressIndicator();
+                  } else if (snapshot.hasError) {
+                    return Text('Error: ${snapshot.error}');
+                  } else {
+                    final totalAmount = snapshot.data ?? 0.0;
+                    return Text(
+                      'Total: ₹${totalAmount.toStringAsFixed(2)}',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    );
+                  }
+                },
+              ),
+              SizedBox(height: 16),
+              Expanded(
+              child: ListView.builder(
+              itemCount: _transactions.length,
+              reverse: true,
+              itemBuilder: (ctx, index) {
+              final transaction = _transactions[index];
+              return ListTile(
+                    title: Text(transaction.title),
+                    subtitle: Text('₹${transaction.amount.toStringAsFixed(2)}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit),
+                          onPressed: () => _editTransaction(transaction, index),
+                        ),
+                        IconButton(
+                            icon: Icon(Icons.delete),
+                            onPressed: () => _deleteTransaction(transaction),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              ),
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildHomeTab(),
-            _buildTransactionsTab(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHomeTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextFormField(
-            controller: _titleController,
-            keyboardType: TextInputType.text, // Specify the keyboard type
-            decoration: InputDecoration(labelText: 'Title'),
-          ),
-          TextFormField(
-            controller: _amountController,
-            keyboardType: TextInputType.number, // Specify the keyboard type
-            decoration: InputDecoration(labelText: 'Amount'),
-          ),
-          ElevatedButton(
-            onPressed: _addTransaction,
-            child: Text('Add Transaction'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTransactionsTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          FutureBuilder<double>(
-            future: DatabaseHelper().calculateTotalAmount(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return CircularProgressIndicator();
-              } else if (snapshot.hasError) {
-                return Text('Error: ${snapshot.error}');
-              } else {
-                final totalAmount = snapshot.data ?? 0.0;
-                return Text(
-                  'Total: ₹${totalAmount.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                );
-              }
-            },
-          ),
-          SizedBox(height: 16),
-          Expanded(
-            child: FutureBuilder<List<UserTransaction>>(
-              future: DatabaseHelper().getTransactions(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return CircularProgressIndicator();
-                } else if (snapshot.hasError) {
-                  return Text('Error: ${snapshot.error}');
-                } else if (snapshot.hasData) {
-                  final transactions = snapshot.data!;
-                  return ListView.builder(
-                    itemCount: transactions.length,
-                    reverse: true, // Add this line to reverse the order
-                    itemBuilder: (ctx, index) {
-                      final transaction = _transactions[index];
-                      return ListTile(
-                        title: Text(transaction.title),
-                        subtitle: Text('₹${transaction.amount.toStringAsFixed(2)}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.edit),
-                              onPressed: () => _editTransaction(transaction, index),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.delete),
-                              onPressed: () => _deleteTransaction(transaction),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                } else {
-                  return Text('No transactions found.');
-                }
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
